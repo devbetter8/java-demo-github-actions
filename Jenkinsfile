@@ -32,7 +32,13 @@ pipeline {
         REGISTRY        = 'registry.gitlab.com'
         IMAGE_NAME      = 'visualbd1/java-demo-appweb'
         MANIFESTS_REPO  = 'https://gitlab.com/visualbd1/usine_full.git'
-        SONAR_PROJECT_KEY = 'visualbd1_java-demo-appweb'
+        // Pas de VM dédiée à SonarQube dans cette usine (3 VM : Jenkins, k3s master,
+        // k3s agent) ; le dépôt étant public, on utilise SonarCloud (alternative
+        // explicitement permise par le §4 du prompt projet). Le serveur "sonarqube"
+        // configuré dans Jenkins (Manage Jenkins > System) pointe alors vers
+        // https://sonarcloud.io. Adapter SONAR_ORGANIZATION à votre organisation SonarCloud.
+        SONAR_PROJECT_KEY  = 'visualbd1_java-demo-appweb'
+        SONAR_ORGANIZATION = 'visualbd1'
     }
 
     stages {
@@ -72,6 +78,7 @@ pipeline {
                     sh """
                         mvn -B sonar:sonar \
                           -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                          -Dsonar.organization=${SONAR_ORGANIZATION} \
                           -Dsonar.token=\$SONAR_AUTH_TOKEN
                     """
                 }
