@@ -33,3 +33,8 @@ mvn test
 docker build -t webapp-java .
 docker run -p 8081:8080 webapp-java
 ```
+
+## CI/CD
+
+Pipeline Jenkins déclenché automatiquement à chaque push via un webhook GitLab
+(build, tests, SonarCloud, Gitleaks, Trivy, push registry, déploiement GitOps).
