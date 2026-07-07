@@ -27,6 +27,14 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '20'))
     }
 
+    parameters {
+        // Désactivé par défaut : aucun compte SonarCloud configuré pour l'instant.
+        // Repasser à true (ou déclencher un build avec ce paramètre) une fois le
+        // serveur "sonarqube" configuré dans Jenkins avec un token valide.
+        booleanParam(name: 'RUN_SONAR', defaultValue: false,
+                     description: 'Exécuter l\'analyse SonarCloud + Quality Gate')
+    }
+
     environment {
         REGISTRY        = 'registry.gitlab.com'
         IMAGE_NAME      = 'visualbd1/java-demo-appweb'
@@ -72,6 +80,7 @@ pipeline {
         }
 
         stage('Qualité de code (SonarQube)') {
+            when { expression { params.RUN_SONAR } }
             agent {
                 docker {
                     image 'maven:3.9-eclipse-temurin-11'
@@ -91,6 +100,7 @@ pipeline {
         }
 
         stage('Quality Gate') {
+            when { expression { params.RUN_SONAR } }
             agent any
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
