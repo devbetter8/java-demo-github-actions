@@ -28,10 +28,9 @@ pipeline {
     }
 
     parameters {
-        // Désactivé par défaut : aucun compte SonarCloud configuré pour l'instant.
-        // Repasser à true (ou déclencher un build avec ce paramètre) une fois le
-        // serveur "sonarqube" configuré dans Jenkins avec un token valide.
-        booleanParam(name: 'RUN_SONAR', defaultValue: false,
+        // SonarCloud configuré (2026-07-07) : serveur "sonarqube" + credential
+        // "sonarqube-token" en place dans Jenkins. Activé par défaut.
+        booleanParam(name: 'RUN_SONAR', defaultValue: true,
                      description: 'Exécuter l\'analyse SonarCloud + Quality Gate')
     }
 
@@ -42,10 +41,12 @@ pipeline {
         // Pas de VM dédiée à SonarQube dans cette usine (3 VM : Jenkins, k3s master,
         // k3s agent) ; le dépôt étant public, on utilise SonarCloud (alternative
         // explicitement permise par le §4 du prompt projet). Le serveur "sonarqube"
-        // configuré dans Jenkins (Manage Jenkins > System) pointe alors vers
-        // https://sonarcloud.io. Adapter SONAR_ORGANIZATION à votre organisation SonarCloud.
-        SONAR_PROJECT_KEY  = 'visualbd1_java-demo-appweb'
-        SONAR_ORGANIZATION = 'visualbd1'
+        // configuré dans Jenkins (Manage Jenkins > System) pointe vers
+        // https://sonarcloud.io. Organisation SonarCloud liée au compte personnel
+        // Darkbd11 (le groupe GitLab visualbd1 n'a pas pu être importé : réservé aux
+        // organisations SonarCloud payantes).
+        SONAR_PROJECT_KEY  = 'java-demo-appweb'
+        SONAR_ORGANIZATION = 'darkbd11'
     }
 
     stages {
