@@ -82,9 +82,15 @@ pipeline {
 
         stage('Qualité de code (SonarQube)') {
             when { expression { params.RUN_SONAR } }
+            // Le scanner sonar-maven-plugin nécessite Java 17+ pour s'exécuter (peu
+            // importe la version cible de compilation du projet, ici 11) : constaté
+            // en run réel — java.lang.UnsupportedClassVersionError (class file 61.0
+            // non supporté par un JRE 11, qui plafonne à la version 55.0). L'analyse
+            // ne recompile pas le code, elle lit juste les .class déjà produits par
+            // le stage précédent : aucun conflit avec le bytecode Java 11 de l'appli.
             agent {
                 docker {
-                    image 'maven:3.9-eclipse-temurin-11'
+                    image 'maven:3.9-eclipse-temurin-17'
                     args '-v $HOME/.m2:/root/.m2'
                 }
             }
