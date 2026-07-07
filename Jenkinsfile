@@ -23,7 +23,6 @@ pipeline {
     agent none
 
     options {
-        timestamps()
         disableConcurrentBuilds()
         buildDiscarder(logRotator(numToKeepStr: '20'))
     }
@@ -57,7 +56,10 @@ pipeline {
 
         stage('Build & Tests unitaires') {
             agent {
-                docker { image 'maven:3.9-eclipse-temurin-11' args '-v $HOME/.m2:/root/.m2' }
+                docker {
+                    image 'maven:3.9-eclipse-temurin-11'
+                    args '-v $HOME/.m2:/root/.m2'
+                }
             }
             steps {
                 sh 'mvn -B clean verify'
@@ -71,7 +73,10 @@ pipeline {
 
         stage('Qualité de code (SonarQube)') {
             agent {
-                docker { image 'maven:3.9-eclipse-temurin-11' args '-v $HOME/.m2:/root/.m2' }
+                docker {
+                    image 'maven:3.9-eclipse-temurin-11'
+                    args '-v $HOME/.m2:/root/.m2'
+                }
             }
             steps {
                 withSonarQubeEnv('sonarqube') {
@@ -164,7 +169,7 @@ pipeline {
 
     post {
         always {
-            node {
+            node('') {
                 sh "docker rmi ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} || true"
             }
         }
