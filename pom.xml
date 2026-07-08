@@ -74,6 +74,20 @@
           <artifactId>sonar-maven-plugin</artifactId>
           <version>3.10.0.2594</version>
         </plugin>
+        <!-- Lint / analyse statique (§4 du prompt). effort Max = analyse la plus poussée ;
+             threshold High = ne signale (et ne casse le build via spotbugs:check) que les
+             bugs à forte confiance, pour éviter le bruit. Invoqué explicitement dans le
+             Jenkinsfile (`mvn spotbugs:check`), pas lié à une phase pour ne pas ralentir
+             les builds locaux. -->
+        <plugin>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
+          <version>4.8.6.4</version>
+          <configuration>
+            <effort>Max</effort>
+            <threshold>High</threshold>
+          </configuration>
+        </plugin>
       </plugins>
     </pluginManagement>
   </build>

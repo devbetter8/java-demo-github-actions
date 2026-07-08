@@ -56,7 +56,15 @@ pipeline {
             steps {
                 script {
                     env.GIT_SHORT_SHA = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
-                    def semver = (env.TAG_NAME ?: 'v0.1.0-dev')
+                    // Version sémantique dérivée du dernier tag Git accessible (§9 du prompt :
+                    // tags vMAJOR.MINOR.PATCH posés sur main). On force un fetch des tags car
+                    // le checkout multibranch peut ne pas les ramener. Priorité : TAG_NAME
+                    // (build d'un tag en multibranch) > dernier tag Git atteignable depuis
+                    // HEAD > fallback v0.1.0-dev (aucun tag encore posé). L'image sort donc
+                    // en vX.Y.Z-<sha> dès qu'un tag sémantique existe, au lieu de rester figée.
+                    sh 'git fetch --tags --quiet || true'
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0 2>/dev/null || true', returnStdout: true).trim()
+                    def semver = (env.TAG_NAME ?: (lastTag ?: 'v0.1.0-dev'))
                     env.IMAGE_TAG = "${semver}-${env.GIT_SHORT_SHA}"
                     echo "Tag d'image calculé : ${env.IMAGE_TAG}"
                 }
@@ -77,6 +85,23 @@ pipeline {
                 always {
                     junit '**/target/surefire-reports/*.xml'
                 }
+            }
+        }
+
+        stage('Lint / analyse statique (SpotBugs)') {
+            // §4 du prompt : "tests unitaires + lint". SpotBugs analyse le bytecode à la
+            // recherche de bug patterns (NPE potentiels, ressources non fermées, etc.).
+            // Seuil High + effort Max : on ne casse le build que sur les défauts à forte
+            // confiance, pour éviter le bruit d'un premier branchement. `spotbugs:check`
+            // échoue (donc fait échouer le pipeline) dès qu'un bug de ce niveau est trouvé.
+            agent {
+                docker {
+                    image 'maven:3.9-eclipse-temurin-11'
+                    args '-v $HOME/.m2:/root/.m2'
+                }
+            }
+            steps {
+                sh 'mvn -B compile spotbugs:check'
             }
         }
 
@@ -112,21 +137,45 @@ pipeline {
             when { expression { params.RUN_SONAR } }
             agent any
             steps {
-                script {
-                    // waitForQualityGate a besoin que SonarCloud rappelle Jenkins via
-                    // webhook (http://<IP_VM1>:8080/sonarqube-webhook/), mais le
-                    // security group Jenkins n'ouvre le port 8080 qu'à l'IP autorisée
-                    // en SSH — pas aux serveurs SonarCloud. Ouvrir ce port au monde
-                    // serait une régression de sécurité pour ce seul callback : on
-                    // dégrade donc en avertissement plutôt qu'en échec de pipeline.
-                    // L'analyse reste bien envoyée et visible sur SonarCloud.
-                    try {
-                        timeout(time: 3, unit: 'MINUTES') {
-                            waitForQualityGate abortPipeline: true
-                        }
-                    } catch (err) {
-                        echo "Quality Gate non confirmé (webhook SonarCloud injoignable depuis l'extérieur, cf. security group) : ${err}"
-                    }
+                // On n'utilise PAS waitForQualityGate : il attend un webhook ENTRANT de
+                // SonarCloud vers Jenkins (http://<IP_VM1>:8080/sonarqube-webhook/), or le
+                // security group n'ouvre le 8080 qu'à l'IP autorisée en SSH — l'ouvrir au
+                // monde pour ce seul callback serait une régression de sécurité. À la place,
+                // on INTERROGE l'API SonarCloud en sortant (polling), ce qui ne nécessite
+                // aucun port entrant. Le report-task.txt écrit par le stage précédent
+                // (workspace partagé, mono-nœud) donne l'URL de la tâche d'analyse.
+                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                    sh '''
+                        set -e
+                        REPORT=$(find . -name report-task.txt -path '*sonar*' | head -1)
+                        if [ -z "$REPORT" ]; then echo "report-task.txt introuvable (analyse Sonar absente)"; exit 1; fi
+                        CE_URL=$(sed -n 's/^ceTaskUrl=//p' "$REPORT")
+                        echo "Tâche d'analyse SonarCloud : $CE_URL"
+
+                        # 1) Attendre la fin du traitement de l'analyse côté SonarCloud (max ~3 min).
+                        ANALYSIS_ID=""
+                        for i in $(seq 1 36); do
+                            CE_JSON=$(curl -s -u "$SONAR_TOKEN:" "$CE_URL")
+                            CE_STATUS=$(echo "$CE_JSON" | sed -n 's/.*"status":"\\([A-Z]*\\)".*/\\1/p')
+                            echo "  statut analyse : ${CE_STATUS:-?}"
+                            case "$CE_STATUS" in
+                                SUCCESS) ANALYSIS_ID=$(echo "$CE_JSON" | sed -n 's/.*"analysisId":"\\([^"]*\\)".*/\\1/p'); break ;;
+                                FAILED|CANCELED) echo "Analyse SonarCloud en échec"; exit 1 ;;
+                            esac
+                            sleep 5
+                        done
+                        if [ -z "$ANALYSIS_ID" ]; then echo "Timeout : analyse SonarCloud non terminée"; exit 1; fi
+
+                        # 2) Récupérer le verdict du Quality Gate pour cette analyse.
+                        QG_JSON=$(curl -s -u "$SONAR_TOKEN:" "https://sonarcloud.io/api/qualitygates/project_status?analysisId=$ANALYSIS_ID")
+                        GATE=$(echo "$QG_JSON" | sed -n 's/.*"projectStatus":{"status":"\\([A-Z]*\\)".*/\\1/p')
+                        echo "Quality Gate = ${GATE:-inconnu}"
+                        case "$GATE" in
+                            OK)    echo "Quality Gate PASSÉ." ;;
+                            ERROR) echo "Quality Gate en ERREUR -> échec du pipeline"; exit 1 ;;
+                            *)     echo "Quality Gate ni OK ni ERROR (=$GATE) : on ne bloque pas (ex: aucune période de référence sur un projet neuf)." ;;
+                        esac
+                    '''
                 }
             }
         }
