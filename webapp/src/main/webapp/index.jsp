@@ -240,7 +240,7 @@ InetAddress.getLocalHost().getHostName(); %>
     </main>
 
     <footer>
-      D&eacute;ploy&eacute; automatiquement
+      D&eacute;ploy&eacute; automatiquement by devbetter8 !
     </footer>
   </body>
 </html>
