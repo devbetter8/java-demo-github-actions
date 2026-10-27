@@ -27,6 +27,14 @@ Génère le fichier `webapp/target/webapp.war`.
 mvn test
 ```
 
+## Intégration et déploiement continus (Jenkins)
+
+Le `Jenkinsfile` décrit le pipeline : build, tests, packaging du WAR, image Docker et déploiement.
+Jenkins vérifie GitLab toutes les 2 minutes. À chaque nouveau commit sur `main`, l'application
+est reconstruite et redéployée sur http://localhost:8081.
+
+La mise en place de Jenkins en local est détaillée dans [ci/README.md](ci/README.md).
+
 ## Deploy avec Docker
 
 ```bash
