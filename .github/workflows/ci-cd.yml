@@ -1,5 +1,5 @@
 # Pipeline CI/CD : Maven, SonarQube, Docker, Trivy, Nexus puis GitOps avec Argo CD.
-# Le runner est auto-hébergé sur le Mac : il accède à SonarQube et Nexus en localhost.
+# Le runner est auto-hébergé sur la machine locale : il accède à SonarQube et Nexus en localhost.
 name: CI/CD
 
 on:
@@ -14,33 +14,22 @@ env:
 jobs:
   build:
     name: Build, tests et SonarQube
-    runs-on: [self-hosted, macOS]
+    runs-on: self-hosted
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Historique complet pour que SonarQube puisse attribuer les lignes (blame).
           fetch-depth: 0
 
-      - name: Installer le JDK 11
-        uses: actions/setup-java@v4
+      - name: Installer le JDK 25
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "11"
+          java-version: "25"
 
       - name: Build et tests unitaires
         run: mvn -B clean verify
-
-      - name: Build et tests unitaires
-        run: mvn -B clean verify
-
-      # Le scanner SonarQube exige Java 17 ou plus.
-      # Le build reste en Java 11 : sonar:sonar ne recompile pas, il analyse target/.
-      - name: Installer le JDK 17 pour SonarQube
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
 
       - name: Analyse SonarQube et Quality Gate
         # sonar.qualitygate.wait fait échouer le job si la Quality Gate est rouge.
@@ -53,7 +42,7 @@ jobs:
           -Dsonar.qualitygate.wait=true
 
       - name: Conserver le WAR pour le job suivant
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: webapp-war
           path: webapp/target/webapp.war
@@ -64,13 +53,13 @@ jobs:
     needs: build
     # Seule la branche main est livrée, même en lancement manuel.
     if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, macOS]
+    runs-on: self-hosted
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Récupérer le WAR
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: webapp-war
           path: webapp/target
@@ -101,7 +90,7 @@ jobs:
         run: docker push "${{ steps.meta.outputs.image }}"
 
       - name: Récupérer le repo des manifests
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ vars.MANIFESTS_REPO }}
           token: ${{ secrets.MANIFESTS_TOKEN }}
