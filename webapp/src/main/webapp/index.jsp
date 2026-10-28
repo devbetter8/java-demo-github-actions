@@ -229,7 +229,7 @@ InetAddress.getLocalHost().getHostName(); %>
           <p>ftutorials/webapp-java:<%= imageTag %></p>
         </div>
         <div class="card">
-          <h3>Build Jenkins</h3>
+          <h3>Build GitHub Actions</h3>
           <p>#<%= buildNumber %></p>
         </div>
         <div class="card">

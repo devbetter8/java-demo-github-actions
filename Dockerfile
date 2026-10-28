@@ -1,4 +1,4 @@
-# Jenkins construit le WAR via Maven (mvn clean package),
+# La CI construit le WAR via Maven (mvn clean verify),
 # puis Docker empaquète uniquement le runtime Tomcat + WAR.
 FROM tomcat:9-jdk11-temurin
 
@@ -8,7 +8,7 @@ LABEL description="Webapp Java"
 # Suppression des webapps par défaut de Tomcat
 RUN rm -rf /usr/local/tomcat/webapps/*
 
-# Copie du WAR buildé par Jenkins (webapp/target/webapp.war)
+# Copie du WAR buildé par la CI (webapp/target/webapp.war)
 COPY webapp/target/webapp.war /usr/local/tomcat/webapps/ROOT.war
 
 EXPOSE 8080
