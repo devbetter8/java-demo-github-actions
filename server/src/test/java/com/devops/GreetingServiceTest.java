@@ -1,40 +1,41 @@
 package com.devops;
 
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-public class GreetingServiceTest {
+import static org.junit.jupiter.api.Assertions.*;
+
+class GreetingServiceTest {
 
     private GreetingService service;
 
-    @Before
-    public void setUp() {
+    @BeforeEach
+    void setUp() {
         service = new GreetingService();
     }
 
     @Test
-    public void testGreetContainsSuccessMessage() {
+    void testGreetContainsSuccessMessage() {
         String result = service.greet("DevOps");
-        assertTrue("Le message doit confirmer le succès du déploiement", result.contains("Bravo"));
+        assertTrue(result.contains("Bravo"), "Le message doit confirmer le succès du déploiement");
     }
 
     @Test
-    public void testGreetNotNull() {
-        assertNotNull("Le message ne doit pas être null", service.greet("test"));
+    void testGreetNotNull() {
+        assertNotNull(service.greet("test"), "Le message ne doit pas être null");
     }
 
     @Test
-    public void testGetVersionNotEmpty() {
+    void testGetVersionNotEmpty() {
         String version = service.getVersion();
         assertNotNull(version);
-        assertFalse("La version ne doit pas être vide", version.isEmpty());
+        assertFalse(version.isEmpty(), "La version ne doit pas être vide");
     }
 
     @Test
-    public void testGetPipelineSteps() {
+    void testGetPipelineSteps() {
         String steps = service.getPipelineSteps();
-        assertTrue("Le pipeline doit inclure Jenkins", steps.contains("Jenkins"));
-        assertTrue("Le pipeline doit inclure Docker", steps.contains("Docker"));
+        assertTrue(steps.contains("Jenkins"), "Le pipeline doit inclure Jenkins");
+        assertTrue(steps.contains("Docker"), "Le pipeline doit inclure Docker");
     }
 }

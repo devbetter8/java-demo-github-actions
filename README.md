@@ -9,7 +9,7 @@ Application de démo Java (JSP + Servlet).
 
 ## Prérequis
 
-- JDK 11
+- JDK 25
 - Maven 3.9+
 - Docker
 
