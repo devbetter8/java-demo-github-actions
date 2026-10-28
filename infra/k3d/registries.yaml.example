@@ -1,0 +1,15 @@
+# Configuration du registre Nexus pour k3s (k3d).
+# Copier ce fichier en registries.yaml puis renseigner le mot de passe.
+# registries.yaml est ignoré par Git car il contient un secret.
+mirrors:
+  # Nom utilisé dans les images : localhost:8082/webapp-java:<tag>.
+  # Dans le cluster, localhost ne pointe pas vers la machine local.
+  # On redirige donc vers host.k3d.internal qui pointe vers le machine local.
+  "localhost:8082":
+    endpoint:
+      - "http://host.k3d.internal:8082"
+configs:
+  "host.k3d.internal:8082":
+    auth:
+      username: github-ci
+      password: CHANGE_ME

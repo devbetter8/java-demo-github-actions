@@ -1,0 +1,29 @@
+# Outils de la chaîne CI/CD lancés en local
+# Démarrage : docker compose -f infra/docker-compose.yml up -d
+services:
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+
+  nexus:
+    image: sonatype/nexus3
+    container_name: nexus
+    ports:
+      # Interface web de Nexus.
+      - "8081:8081"
+      # Connecteur HTTP du dépôt Docker hébergé.
+      - "8082:8082"
+    volumes:
+      - nexus_data:/nexus-data
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  nexus_data:

@@ -43,4 +43,5 @@ Thumbs.db
 
 # Environment / secrets
 .env
+infra/k3d/registries.yaml
 
