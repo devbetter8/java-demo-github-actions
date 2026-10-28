@@ -31,6 +31,17 @@ jobs:
       - name: Build et tests unitaires
         run: mvn -B clean verify
 
+      - name: Build et tests unitaires
+        run: mvn -B clean verify
+
+      # Le scanner SonarQube exige Java 17 ou plus.
+      # Le build reste en Java 11 : sonar:sonar ne recompile pas, il analyse target/.
+      - name: Installer le JDK 17 pour SonarQube
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Analyse SonarQube et Quality Gate
         # sonar.qualitygate.wait fait échouer le job si la Quality Gate est rouge.
         run: >
