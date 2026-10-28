@@ -1,0 +1,122 @@
+# Pipeline CI/CD : Maven, SonarQube, Docker, Trivy, Nexus puis GitOps avec Argo CD.
+# Le runner est auto-hébergé sur le Mac : il accède à SonarQube et Nexus en localhost.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: localhost:8082
+  IMAGE_NAME: webapp-java
+
+jobs:
+  build:
+    name: Build, tests et SonarQube
+    runs-on: [self-hosted, macOS]
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+        with:
+          # Historique complet pour que SonarQube puisse attribuer les lignes (blame).
+          fetch-depth: 0
+
+      - name: Installer le JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+
+      - name: Build et tests unitaires
+        run: mvn -B clean verify
+
+      - name: Analyse SonarQube et Quality Gate
+        # sonar.qualitygate.wait fait échouer le job si la Quality Gate est rouge.
+        run: >
+          mvn -B sonar:sonar
+          -Dsonar.projectKey=java-demo-github-actions
+          -Dsonar.projectName=java-demo-github-actions
+          -Dsonar.host.url=${{ vars.SONAR_HOST_URL }}
+          -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+          -Dsonar.qualitygate.wait=true
+
+      - name: Conserver le WAR pour le job suivant
+        uses: actions/upload-artifact@v4
+        with:
+          name: webapp-war
+          path: webapp/target/webapp.war
+          retention-days: 1
+
+  deliver:
+    name: Image Docker, Trivy, Nexus et manifests
+    needs: build
+    # Seule la branche main est livrée, même en lancement manuel.
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS]
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Récupérer le WAR
+        uses: actions/download-artifact@v4
+        with:
+          name: webapp-war
+          path: webapp/target
+
+      - name: Calculer le tag de l'image
+        id: meta
+        run: |
+          TAG="${GITHUB_SHA::7}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "image=$REGISTRY/$IMAGE_NAME:$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Construire l'image Docker
+        run: docker build -t "${{ steps.meta.outputs.image }}" .
+
+      - name: Scanner l'image avec Trivy
+        # Bloque le pipeline si une vulnérabilité CRITICAL corrigeable est trouvée.
+        run: >
+          trivy image
+          --severity CRITICAL
+          --ignore-unfixed
+          --exit-code 1
+          "${{ steps.meta.outputs.image }}"
+
+      - name: Se connecter à Nexus
+        run: echo "${{ secrets.NEXUS_PASSWORD }}" | docker login "$REGISTRY" -u "${{ secrets.NEXUS_USERNAME }}" --password-stdin
+
+      - name: Pousser l'image dans Nexus
+        run: docker push "${{ steps.meta.outputs.image }}"
+
+      - name: Récupérer le repo des manifests
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.MANIFESTS_REPO }}
+          token: ${{ secrets.MANIFESTS_TOKEN }}
+          path: manifests
+
+      - name: Mettre à jour le tag dans les manifests
+        working-directory: manifests
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          yq -i '.spec.template.spec.containers[0].image = strenv(IMAGE)' webapp/deployment.yaml
+          yq -i '(.spec.template.spec.containers[0].env[] | select(.name == "IMAGE_TAG")).value = strenv(TAG)' webapp/deployment.yaml
+          yq -i '(.spec.template.spec.containers[0].env[] | select(.name == "BUILD_NUMBER")).value = strenv(RUN_NUMBER)' webapp/deployment.yaml
+
+      - name: Commit et push des manifests
+        working-directory: manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add webapp/deployment.yaml
+          # Rien à commiter si le workflow est relancé sur le même commit.
+          if git diff --cached --quiet; then
+            echo "Manifests déjà à jour."
+            exit 0
+          fi
+          git commit -m "chore(webapp): deploy image ${{ steps.meta.outputs.tag }}"
+          git push
