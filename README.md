@@ -33,3 +33,8 @@ mvn test
 docker build -t webapp-java .
 docker run -p 8081:8080 webapp-java
 ```
+
+## CI/CD
+
+Pipeline GitHub Actions avec SonarQube, Trivy, Nexus, Argo CD et k3s.
+Voir [docs/CI-CD.md](docs/CI-CD.md).
