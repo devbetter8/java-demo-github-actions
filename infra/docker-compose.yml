@@ -1,4 +1,4 @@
-# Outils de la chaîne CI/CD lancés en local
+# Outils de la chaîne CI/CD lancés sur la machine locale.
 # Démarrage : docker compose -f infra/docker-compose.yml up -d
 services:
   sonarqube:

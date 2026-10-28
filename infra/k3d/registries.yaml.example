@@ -3,8 +3,8 @@
 # registries.yaml est ignoré par Git car il contient un secret.
 mirrors:
   # Nom utilisé dans les images : localhost:8082/webapp-java:<tag>.
-  # Dans le cluster, localhost ne pointe pas vers la machine local.
-  # On redirige donc vers host.k3d.internal qui pointe vers le machine local.
+  # Dans le cluster, localhost ne pointe pas vers la machine hôte.
+  # On redirige donc vers host.k3d.internal, qui pointe vers la machine hôte.
   "localhost:8082":
     endpoint:
       - "http://host.k3d.internal:8082"

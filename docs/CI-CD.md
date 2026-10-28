@@ -6,9 +6,9 @@
 git push (main)
   |
   v
-GitHub -- déclenche --> Runner auto-hébergé (Machine local)
+GitHub -- déclenche --► Runner auto-hébergé (machine locale)
                           |
-                          ├- Job build
+                          |- Job build
                           |    Maven : build + tests
                           |    SonarQube : analyse + Quality Gate
                           |
@@ -33,20 +33,49 @@ Deux repos GitHub :
 ### Pourquoi un runner auto-hébergé ?
 
 Les runners fournis par GitHub tournent dans le cloud.
-Ils ne peuvent pas joindre SonarQube ou Nexus sur la machine locale.
-Le runner auto-hébergé tourne sur la machine locale. Il contacte GitHub pour récupérer les jobs.
+Ils ne peuvent pas joindre SonarQube ou Nexus, qui tournent sur votre machine locale.
+Le runner auto-hébergé tourne sur votre machine. Il contacte GitHub pour récupérer les jobs.
 Aucun port n'est ouvert vers l'extérieur et ngrok n'est pas nécessaire.
 
-## 1. Prérequis sur la machine locale
+Les étapes du workflow sont écrites en Bash.
+Le runner doit donc tourner sous macOS ou Linux. Sous Windows, utilisez WSL2.
 
-- Docker Desktop démarré.
-- Les outils en ligne de commande :
+## 1. Prérequis sur votre machine
+
+Le runner exécute les commandes du workflow directement sur votre machine.
+Chaque outil utilisé par le pipeline doit donc y être installé.
+
+| Outil          | Utilisé par         | Installation                                                                      |
+|----------------|---------------------|-----------------------------------------------------------------------------------|
+| Docker         | le pipeline et vous | [Docker Desktop](https://docs.docker.com/get-docker/) ou Docker Engine sous Linux |
+| Maven 3.9+     | le pipeline         | [Binaire officiel](https://maven.apache.org/download.cgi)                         |
+| Trivy          | le pipeline         | [Installation](https://trivy.dev/latest/getting-started/installation/)            |
+| yq (mikefarah) | le pipeline         | [Releases](https://github.com/mikefarah/yq/releases)                              |
+| k3d            | vous, une fois      | [Installation](https://k3d.io/stable/#installation)                               |
+| kubectl        | vous                | [Installation](https://kubernetes.io/docs/tasks/tools/)                           |
+
+Le JDK 25 est installé par le workflow avec `actions/setup-java`. Pas besoin de l'installer.
+
+Avec Homebrew (macOS Apple Silicon ou Linux), une seule commande suffit :
 
 ```bash
 brew install maven trivy yq k3d kubectl
 ```
 
-Le JDK 11 est installé par le workflow avec `actions/setup-java`.
+Homebrew ne prend plus en charge les Mac Intel.
+Sur ces machines, installez Maven depuis le binaire officiel :
+
+```bash
+curl -LO https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz
+mkdir -p ~/tools
+tar xzf apache-maven-3.9.11-bin.tar.gz -C ~/tools
+rm apache-maven-3.9.11-bin.tar.gz
+echo 'export PATH="$HOME/tools/apache-maven-3.9.11/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+mvn -v
+```
+
+Remplacez `~/.zshrc` par `~/.bashrc` si votre shell est Bash.
 
 ## 2. Lancer SonarQube et Nexus
 
@@ -54,7 +83,16 @@ Le JDK 11 est installé par le workflow avec `actions/setup-java`.
 docker compose -f infra/docker-compose.yml up -d
 ```
 
-Nexus met 1 à 2 minutes à démarrer.
+Vérifiez que les ports 9000, 8081 et 8082 sont libres.
+Arrêtez par exemple un autre SonarQube déjà lancé sur le port 9000.
+
+Nexus met 1 à 2 minutes à démarrer. Pour vérifier que SonarQube est prêt :
+
+```bash
+curl http://localhost:9000/api/system/status
+```
+
+La réponse doit contenir `"status":"UP"`.
 
 ## 3. Configurer SonarQube
 
@@ -84,7 +122,7 @@ Le projet `java-demo-github-actions` est créé automatiquement à la première 
    - Security > Roles > Create role. ID `github-ci-role`.
      Privilège : `nx-repository-view-docker-docker-hosted-*`.
    - Security > Users > Create local user. ID `github-ci`, rôle `github-ci-role`.
-6. Tester depuis la machine locale :
+6. Tester depuis votre machine :
 
    ```bash
    docker login localhost:8082 -u github-ci
@@ -112,8 +150,13 @@ Le `GITHUB_TOKEN` automatique ne peut écrire que dans le repo du workflow.
 Pour pousser dans le repo des manifests, il faut un Personal Access Token.
 
 1. GitHub > Settings > Developer settings > Fine-grained tokens > Generate new token.
-2. Repository access : Only select repositories > `java-demo-github-actions-manifests`.
-3. Permissions > Contents : `Read and write`.
+2. Repository access : cocher `Only select repositories`, puis choisir `java-demo-github-actions-manifests`.
+   La liste des permissions n'apparaît qu'après ce choix.
+3. Permissions : ajouter `Contents` et choisir `Read and write`.
+   `Metadata: Read-only` s'ajoute automatiquement.
+
+Un token classic avec le scope `public_repo` fonctionne aussi.
+Il donne cependant accès en écriture à tous vos repos. Le fine-grained token limite l'accès au seul repo de manifests.
 
 ## 7. Déclarer les secrets et variables
 
@@ -128,7 +171,7 @@ Onglet **Secrets** :
 | `NEXUS_PASSWORD`  | Mot de passe de `github-ci` |
 | `MANIFESTS_TOKEN` | Token GitHub (étape 6)      |
 
-Onglet **Variables** :
+Onglet **Variables**, section **Repository variables** :
 
 | Nom              | Valeur                                          |
 |------------------|-------------------------------------------------|
@@ -137,34 +180,48 @@ Onglet **Variables** :
 
 Un secret est masqué dans les logs. Une variable est visible. L'URL n'est pas sensible, d'où la variable.
 
+Attention : une variable absente ou mal placée (dans Secrets ou dans un Environment) est remplacée par une chaîne vide, sans erreur.
+
 ## 8. Installer le runner auto-hébergé
 
 1. Repo applicatif > Settings > Actions > Runners > New self-hosted runner.
-2. Choisir `macOS` et l'architecture du Mac (ou de votre machine locale).
-3. Exécuter les commandes affichées (téléchargement puis `./config.sh ...`).
-   Garder les labels par défaut (`self-hosted`, `macOS`).
-4. Démarrer le runner dans un terminal et le laisser ouvert :
+2. Choisir le système et l'architecture de votre machine.
+3. Créer le dossier du runner **en dehors** du repo, par exemple `~/actions-runner`.
+   Il contient les identifiants du runner et ne doit jamais être commité.
+4. Exécuter les commandes affichées (téléchargement puis `./config.sh ...`).
+   Garder les labels par défaut.
+5. Démarrer le runner dans un terminal et le laisser ouvert :
 
    ```bash
    ./run.sh
    ```
 
-Lance le runner avec `./run.sh` plutôt qu'en service.
+Le runner enregistre le PATH au moment de `./config.sh`, dans le fichier `.path`.
+Si vous installez un outil après coup, mettez ce fichier à jour puis relancez le runner :
+
+```bash
+echo "$PATH" > ~/actions-runner/.path
+```
+
+Sous macOS, lancez le runner avec `./run.sh` plutôt qu'en service.
 En service, `docker login` échoue souvent car il n'a pas accès au trousseau macOS.
 
 **Sécurité.** Le repo est public. Le workflow ne se déclenche pas sur les pull requests.
-Un fork ne peut donc pas exécuter de code sur votre machine locale.
+Un fork ne peut donc pas exécuter de code sur votre machine.
 Par précaution : Settings > Actions > General > Fork pull request workflows > `Require approval for all external contributors`.
 
 ## 9. Premier lancement du pipeline
 
-Merger la branche dans `main` ou lancer le workflow à la main (onglet Actions > CI/CD > Run workflow).
+Pousser sur `main` ou lancer le workflow à la main (onglet Actions > CI/CD > Run workflow).
 
 Vérifier :
 
 - Le job est vert dans l'onglet Actions.
 - L'image apparaît dans Nexus : Browse > `docker-hosted`.
 - Un commit `chore(webapp): deploy image ...` apparaît dans le repo des manifests.
+
+En cas d'échec, **Re-run failed jobs** suffit si vous avez corrigé un outil, une variable ou un secret.
+Si vous avez modifié le workflow, il faut un nouveau push : une relance réutilise le workflow du commit d'origine.
 
 ## 10. Créer le cluster k3s avec k3d
 
@@ -180,8 +237,8 @@ k3d cluster create tp-gha \
 - `-p "8090:80@loadbalancer"` expose l'Ingress Traefik sur http://localhost:8090.
 - `--registry-config` indique à k3s comment joindre Nexus.
 
-Dans le cluster, `localhost` désigne le nœud lui-même et pas la machine locale.
-Le fichier redirige donc `localhost:8082` vers `host.k3d.internal:8082`, qui pointe vers la machine locale.
+Dans le cluster, `localhost` désigne le nœud lui-même et pas votre machine.
+Le fichier redirige donc `localhost:8082` vers `host.k3d.internal:8082`, qui pointe vers votre machine.
 L'image garde le même nom partout : `localhost:8082/webapp-java:<tag>`.
 
 ## 11. Installer Argo CD
@@ -227,10 +284,11 @@ kubectl apply -n argocd -f argocd/application.yaml
 
 | Problème                                    | Piste                                                                                                                                   |
 |---------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
-| Le job reste en `Queued`                    | Le runner n'est pas lancé (`./run.sh`) ou ses labels ne correspondent pas.                                                              |
-| `mvn: command not found`                    | Maven n'est pas installé sur la machine locale (`brew install maven`).                                                                             |
+| Le job reste en `Queued`                    | Le runner n'est pas lancé (`./run.sh`).                                                                                                 |
+| `command not found` (mvn, trivy, yq)        | L'outil n'est pas installé, ou le fichier `.path` du runner est à mettre à jour (étape 8).                                              |
+| `SonarQube server [] can not be reached`    | La variable `SONAR_HOST_URL` est absente ou mal placée (étape 7).                                                                       |
 | Quality Gate en échec                       | Lire le détail dans SonarQube. Le job échoue volontairement.                                                                            |
 | Trivy bloque le pipeline                    | Lire le rapport dans les logs. Mettre à jour l'image de base du Dockerfile.                                                             |
-| `error storing credentials` au login Docker | Lancer le runner avec `./run.sh` dans une session ouverte.                                                                              |
+| `error storing credentials` au login Docker | Sous macOS, lancer le runner avec `./run.sh` dans une session ouverte.                                                                  |
 | Pod en `ImagePullBackOff`                   | Vérifier le mot de passe dans `registries.yaml`. Contrôler avec `docker exec k3d-tp-gha-server-0 cat /etc/rancher/k3s/registries.yaml`. |
 | Le pod ne démarre pas avant le premier run  | Normal : l'image `initial` n'existe pas. Lancer le pipeline une fois.                                                                   |
